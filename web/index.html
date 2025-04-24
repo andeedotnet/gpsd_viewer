@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPSD Data</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/openlayers/3.19.1/ol.css" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq"
+        crossorigin="anonymous"></script>
+    <style>
+        html {
+            font-size: 12px;
+        }
+        
+    </style>
+</head>
+
+<body class="d-flex flex-column h-100 text-small">
+
+    <!-- Begin page content -->
+    <main class="flex-shrink-0">
+        <div class="container">
+            <h1>GPSD Data</h1>
+        </div>
+
+
+        <!-- Map Container -->
+        <div class="container">
+            <div class="ratio ratio-16x9">
+                <div id="map"></div>
+            </div>
+        </div>
+
+
+        <div class="container mt-4">
+            <!-- TPV Table -->
+            <h2>TPV Data (Last 10 Positions)</h2>
+            <table id="tpvTable" class="table table-striped table-bordered table-sm">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Latitude (lat)</th>
+                        <th>Longitude (lon)</th>
+                        <th>Altitude (alt)</th>
+                        <th>Speed (speed)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- TPV data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="container mt-4">
+            <!-- Satellites Table -->
+            <h2>Satellite Data</h2>
+            <table id="satelliteTable" class="table table-striped table-bordered table-sm">
+                <thead>
+                    <tr>
+                        <th>PRN</th>
+                        <th>gnssid</th>
+                        <th>Elevation (el)</th>
+                        <th>Azimuth (az)</th>
+                        <th>Signal Strength (ss)</th>
+                        <th>Used (used)</th>
+                        <th>Latitude (calculated)</th>
+                        <th>Longitude (calculated)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Satellites data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <footer class="footer mt-auto py-3 bg-body-tertiary">
+        <div class="container">
+            dpsd parser
+        </div>
+    </footer>
+
+
+
+
+</body>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/openlayers/3.19.1/ol.js"></script>
+<script>
+    let lastTPVData = null; // To store the latest TPV data for calculation
+    let map; // OpenLayers map instance
+    let tpvMarker; // Marker for the TPV position
+    let satelliteMarkers = []; // Array to store satellite markers
+
+
+    // Function to fetch the JSON data from the Go web server
+    async function fetchData() {
+        try {
+            const response = await fetch('/json');
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            const data = await response.json();
+
+            // Display TPV data
+            displayTPVData(data.tpv.reverse());
+
+            // Display Satellite data with coordinates based on TPV
+            displaySatellites(data.sky);
+
+            // Update the map with the new TPV and satellite positions
+            updateMap(data.tpv, data.sky);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            document.getElementById('jsonData').textContent = 'Error loading data';
+        }
+    }
+
+    // Function to display TPV data in a table
+    function displayTPVData(tpvData) {
+        const tableBody = document.getElementById('tpvTable').getElementsByTagName('tbody')[0];
+        tableBody.innerHTML = ''; // Reset table
+
+        if (Array.isArray(tpvData)) {
+            tpvData.forEach(tpv => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                        <td>${new Date(tpv.time).toLocaleString()}</td>
+                        <td>${tpv.lat}</td>
+                        <td>${tpv.lon}</td>
+                        <td>${tpv.alt}</td>
+                        <td>${tpv.speed}</td>
+                    `;
+                tableBody.appendChild(row);
+                lastTPVData = tpv; // Save the last TPV data
+            });
+        } else {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td colspan="5">No TPV data found</td>`;
+            tableBody.appendChild(row);
+        }
+    }
+
+    // Function to display Satellites data with coordinates in a table
+    function displaySatellites(skyData) {
+        const tableBody = document.getElementById('satelliteTable').getElementsByTagName('tbody')[0];
+        tableBody.innerHTML = ''; // Reset table
+
+        if (skyData && Array.isArray(skyData.satellites)) {
+            skyData.satellites.forEach(satellite => {
+                const satelliteCoords = calculateSatelliteCoordinates(satellite, lastTPVData);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                        <td>${satellite.PRN}</td>
+                        <td>${satellite.gnssid}</td>
+                        <td>${satellite.el}</td>
+                        <td>${satellite.az}</td>
+                        <td>${satellite.ss}</td>
+                        <td>${satellite.used}</td>
+                        <td>${satelliteCoords.lat}</td>
+                        <td>${satelliteCoords.lon}</td>
+                    `;
+                tableBody.appendChild(row);
+            });
+        } else {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td colspan="7">No Satellites data found</td>`;
+            tableBody.appendChild(row);
+        }
+    }
+
+    // Function to calculate the satellite's coordinates based on the TPV data
+    function calculateSatelliteCoordinates(satellite, tpvData) {
+        if (!satellite || !tpvData) return { lat: 'N/A', lon: 'N/A' };
+
+        const lat1 = tpvData.lat * Math.PI / 180;
+        const lon1 = tpvData.lon * Math.PI / 180;
+        const el = satellite.el * Math.PI / 180;
+        const az = satellite.az * Math.PI / 180;
+
+        // Earth radius in kilometers
+        const earthRadius = 6371;
+
+        // Calculate the satellite's relative position
+        const distance = earthRadius * Math.cos(el); // Horizontal distance from observer
+
+        // Calculate the satellite's latitude and longitude
+        const lat2 = lat1 + (distance * Math.cos(az)) / earthRadius;
+        const lon2 = lon1 + (distance * Math.sin(az)) / (earthRadius * Math.cos(lat1));
+
+        // Convert the calculated lat/lon back to degrees
+        const calculatedLat = lat2 * 180 / Math.PI;
+        const calculatedLon = lon2 * 180 / Math.PI;
+
+        return { lat: calculatedLat.toFixed(6), lon: calculatedLon.toFixed(6) };
+    }
+
+    // Initialize the OpenLayers map
+    function initMap() {
+        map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([0, 0]),
+                zoom: 3
+            }),
+            interactions: ol.interaction.defaults({ mouseWheelZoom: false }),
+        });
+
+
+    }
+
+    // Update the map with TPV and satellite markers
+    function updateMap(tpvData, skyData) {
+        if (!map || !tpvData || tpvData.length === 0) return;
+
+        // If TPV data is available, update the TPV marker
+        const latestTPV = tpvData[tpvData.length - 1];
+        const lat = latestTPV.lat;
+        const lon = latestTPV.lon;
+
+        // Update TPV marker if it already exists, or create it if it doesn't
+        if (tpvMarker) {
+            tpvMarker.setPosition(ol.proj.fromLonLat([lon, lat]));
+        } else {
+            tpvMarker = new ol.Overlay({
+                position: ol.proj.fromLonLat([lon, lat]),
+                positioning: 'center-center',
+                element: document.createElement('div')
+            });
+            tpvMarker.getElement().style.backgroundColor = 'green';
+            tpvMarker.getElement().style.width = '10px';
+            tpvMarker.getElement().style.height = '10px';
+            // tpvMarker.getElement().style.borderRadius = '50%';
+            map.addOverlay(tpvMarker);
+        }
+
+        // Center the map on the latest TPV position
+        map.getView().setCenter(ol.proj.fromLonLat([lon, lat]));
+
+        // Update satellite markers
+        if (skyData && skyData.satellites) {
+            skyData.satellites.forEach(satellite => {
+                const satelliteCoords = calculateSatelliteCoordinates(satellite, latestTPV);
+                const satelliteLat = parseFloat(satelliteCoords.lat);
+                const satelliteLon = parseFloat(satelliteCoords.lon);
+
+                // Find or create satellite marker
+                let satelliteMarker = satelliteMarkers.find(marker => marker.PRN === satellite.PRN);
+                if (!satelliteMarker) {
+                    satelliteMarker = new ol.Overlay({
+                        position: ol.proj.fromLonLat([satelliteLon, satelliteLat]),
+                        positioning: 'center-center',
+                        element: document.createElement('div')
+                    });
+                    satelliteMarker.PRN = satellite.PRN; // Store PRN for later reference
+                    satelliteMarkers.push(satelliteMarker);
+                    map.addOverlay(satelliteMarker);
+                } else {
+                    satelliteMarker.setPosition(ol.proj.fromLonLat([satelliteLon, satelliteLat]));
+                }
+
+                // Style the satellite markers
+                if (satellite.used) {
+                    satelliteMarker.getElement().style.backgroundColor = 'blue';
+                }
+                else {
+                    satelliteMarker.getElement().style.backgroundColor = 'darkgrey';
+                }
+                satelliteMarker.getElement().style.width = '8px';
+                satelliteMarker.getElement().style.height = '8px';
+                satelliteMarker.getElement().style.borderRadius = '50%';
+
+                // Add PRN label next to the satellite marker
+                const prnLabel = document.createElement('div');
+
+                switch (satellite.gnssid) {
+                    case 0:
+                        satType = "GPS"
+                        break;
+                    case 1:
+                        satType = "SBAS"
+                        break;
+                    case 2:
+                        satType = "GALILEO"
+                        break;
+                    case 3:
+                        satType = "BEIDOU"
+                        break;
+                    case 4:
+                        satType = "IMES"
+                        break;
+                    case 5:
+                        satType = "QZSS"
+                        break;
+                    case 6:
+                        satType = "GNSS"
+                        break;
+                    default:
+                        satType = "NA"
+                }
+
+                prnLabel.innerHTML = satType + ":" + satellite.PRN;
+                prnLabel.style.position = 'absolute';
+                prnLabel.style.top = '-4px';
+                prnLabel.style.left = '10px';
+                prnLabel.style.color = 'white';
+                prnLabel.style.backgroundColor = 'black';
+                prnLabel.style.padding = '2px';
+                prnLabel.style.fontSize = '10px';
+                prnLabel.style.borderRadius = '3px';
+                satelliteMarker.getElement().appendChild(prnLabel);
+            });
+        }
+    }
+
+    // Execute function when the page loads
+    window.onload = function () {
+        initMap();
+        fetchData();
+    };
+
+    // Update the data every X seconds
+    setInterval(fetchData, 1000);
+</script>
+
+</html>

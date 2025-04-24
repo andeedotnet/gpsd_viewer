@@ -23,3 +23,37 @@ A lightweight Go server that connects to a `gpsd` daemon, processes live GPS dat
 |---|---|---|
 | -gpsd | address and port of gpsd daemon. | localhost:2947 |
 | -p    | port for gpsd_viewer web interface.  | 9000 |
+
+
+#### Example
+The project was developed just for fun, as I was playing around with my 5G router (GL.iNet GL-X3000) and wanted to access the GPS data. Here's how to enable GPSD on the router:
+
+1. Send manual commands on the admin page for the modem:
+```
+AT+QGPSCFG="autogps",1
+AT+QGPS=1
+```
+
+2. Install gpsd via the Plugins page
+
+3. Configure gpsd
+```
+uci set gpsd.core.device='/dev/mhi_LOOPBACK'
+uci set gpsd.core.listen_globally='1'
+uci set gpsd.core.enabled='1'
+
+/etc/init.d/gpsd enable
+/etc/init.d/gpsd start
+```
+
+4. Optional: Enable Glonass, Galileo, Beidou NMEA sentence output
+```
+AT+QGPSCFG="glonassnmeatype",1
+AT+QGPSCFG="galileonmeatype",1
+AT+QGPSCFG="beidounmeatype",1
+```
+
+5. Copy gpsd_viewer_linux_arm64 from releases to your Router and run
+```
+./gpsd_viewer_linux_arm64 -gpsd localhost:2947 -p 9000
+```

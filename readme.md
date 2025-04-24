@@ -25,7 +25,7 @@ A lightweight Go server that connects to a `gpsd` daemon, processes live GPS dat
 | -p    | port for gpsd_viewer web interface.  | 9000 |
 
 
-#### Example
+### Example
 The project was developed just for fun, as I was playing around with my 5G router (GL.iNet GL-X3000) and wanted to access the GPS data. Here's how to enable GPSD on the router:
 
 1. Send manual commands on the admin page for the modem:

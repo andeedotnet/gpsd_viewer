@@ -6,7 +6,7 @@ A lightweight GPSD Client that connects to a `gpsd` daemon, processes live GPS d
 
 - Connects to a local or remote `gpsd` daemon
 - Handles `TPV`, `SKY`, and `AIS` GPSD message types
-- Provides a JSON endpoint (/json) for external tools or frontend use
+- Provides a JSON endpoint (/api) for external tools or frontend use
 
 ## 📦 Requirements
 

@@ -1,6 +1,6 @@
 # GPSD Viewer
 
-A lightweight GPSD Client that connects to a `gpsd` daemon, processes live GPS data, and serves it as JSON via a web interface.
+A lightweight GPSD Client that connects to a `gpsd` daemon, processes live GPS data, and serves it as JSON with simple web interface.
 
 ## 🌍 Features
 

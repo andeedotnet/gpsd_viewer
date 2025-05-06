@@ -23,6 +23,7 @@ A lightweight Go server that connects to a `gpsd` daemon, processes live GPS dat
 |---|---|---|
 | -gpsd | address and port of gpsd daemon. | localhost:2947 |
 | -p    | port for gpsd_viewer web interface.  | 9000 |
+| -e    | use embedded web interface (true / false)  | true |
 
 
 ### Example
@@ -53,7 +54,9 @@ AT+QGPSCFG="galileonmeatype",1
 AT+QGPSCFG="beidounmeatype",1
 ```
 
-5. Copy gpsd_viewer_linux_arm64 from releases to your Router and run
+5. Copy gpsd_viewer_linux_arm64 from releases and run
 ```
 ./gpsd_viewer_linux_arm64 -gpsd localhost:2947 -p 9000
 ```
+
+If you want to use your own web app, you can simply place it under /static and start gpsd_viewer with ```-e false```.
